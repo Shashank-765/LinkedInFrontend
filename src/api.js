@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "http://localhost:3000", // backend URL
+  baseURL: "https://aipostbe.bastionex.net", // backend URL
 });
 
 // --- API functions ---
@@ -16,6 +16,13 @@ export const bulkSchedulePosts = ({ ids, startTime, perDay, manualDate }) => {
     manualDate,
   }).then((res) => res.data);
 };
+
+// Start auto-post scheduler
+export const startAutoPosting = () => API.post("/posts/start");
+export const getSchedulerStatus = () => API.get("/posts/status");
+
+// Stop posts scheduler
+export const stopAutoPosting = () => API.post("/posts/stop");
 export const approvePost = (id) => API.post(`/posts/approve/${id}`);
 export const schedulePost = (id, scheduledAt, autoApprove = false) =>
   API.post(`/posts/schedule/${id}`, { scheduledAt, autoApprove });

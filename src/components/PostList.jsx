@@ -261,61 +261,96 @@ export default function PostList() {
           </div>
         </div>
       )}
+{/* View Modal */}
+{viewPost && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+    <div className="bg-white p-6 rounded-lg shadow-lg w-11/12 max-w-lg relative overflow-y-auto max-h-[90vh]">
+      {/* Close Button */}
+      <button
+        className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+        onClick={() => setViewPost(null)}
+      >
+        ✖
+      </button>
 
-      {/* View Modal */}
-      {viewPost && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white p-6 rounded w-11/12 max-w-lg relative">
-            <button
-              className="absolute top-2 right-2 text-gray-500"
-              onClick={() => setViewPost(null)}
-            >
-              ✖
-            </button>
-            <h2 className="text-xl font-bold mb-2">{viewPost.topic}</h2>
-            <p className="mb-2">
-              <strong>Status:</strong> {viewPost.status}
-            </p>
-            <p className="mb-2">
-              <strong>Scheduled At:</strong>{" "}
-              {viewPost.scheduledAt
-                ? new Date(viewPost.scheduledAt).toLocaleString()
-                : "-"}
-            </p>
-            <p className="mb-2">
-              <strong>Posted At:</strong>{" "}
-              {viewPost.postedAt
-                ? new Date(viewPost.postedAt).toLocaleString()
-                : "-"}
-            </p>
-            <p className="mb-2">
-              <strong>Content:</strong> {viewPost.content}
-            </p>
-            {viewPost.images && viewPost.images.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {viewPost.images.map((img, idx) => (
-                  <img
-                    key={idx}
-                    src={img}
-                    alt="Post"
-                    className="w-20 h-20 object-cover"
-                  />
-                ))}
-              </div>
-            )}
-            {viewPost.linkedinPostUrl && (
-              <a
-                href={viewPost.linkedinPostUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 underline mt-2 inline-block"
-              >
-                View on LinkedIn
-              </a>
-            )}
-          </div>
+      {/* Header */}
+      <h2 className="text-xl font-bold mb-4">{viewPost.topic}</h2>
+
+      {/* Status */}
+      <div className="mb-2">
+        <strong>Status:</strong> {viewPost.status}
+      </div>
+      <div className="mb-2">
+        <strong>Scheduled At:</strong>{" "}
+        {viewPost.scheduledAt
+          ? new Date(viewPost.scheduledAt).toLocaleString()
+          : "-"}
+      </div>
+      <div className="mb-2">
+        <strong>Posted At:</strong>{" "}
+        {viewPost.postedAt
+          ? new Date(viewPost.postedAt).toLocaleString()
+          : "-"}
+      </div>
+
+      {/* Content (headline + pointers) */}
+      <div className="mb-4">
+        <strong>Content:</strong>
+        <div className="mt-2 space-y-4">
+          {viewPost.content
+            ?.split(/\n(?=[A-Z].*?:)/) // split on "Heading:" style lines
+            .filter(Boolean)
+            .map((section, idx) => {
+              const [heading, ...points] = section.trim().split("\n").map(s => s.trim());
+              return (
+                <div
+                  key={idx}
+                  className="p-4 rounded-lg bg-gray-100 border border-gray-200"
+                >
+                  <h3 className="font-semibold text-gray-800">{heading}</h3>
+                  <ul className="list-disc list-inside mt-2 text-sm text-gray-700">
+                    {points.map((pt, i) => (
+                      <li key={i}>{pt.replace(/^[-•]\s*/, "")}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
         </div>
+      </div>
+
+      {/* Images */}
+      {viewPost.images && viewPost.images.length > 0 && (
+  <div className="flex gap-2 flex-wrap mb-4">
+    {viewPost.images.map((img, idx) => (
+      <img
+        key={idx}
+        src={`https://aipostbe.bastionex.net/uploads/${img}`}
+        alt="Post"
+        className="w-20 h-20 object-cover rounded border"
+      />
+    ))}
+  </div>
+)}
+
+      {/* LinkedIn Link */}
+      {viewPost.linkedinPostUrl && (
+        <a
+          href={viewPost.linkedinPostUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-blue-600 underline mt-2 inline-block"
+        >
+          View on LinkedIn
+        </a>
       )}
+    </div>
+  </div>
+)}
+
+
+
+
     </div>
   );
 }
