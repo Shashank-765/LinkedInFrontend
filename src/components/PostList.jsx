@@ -325,7 +325,7 @@ export default function PostList() {
     {viewPost.images.map((img, idx) => (
       <img
         key={idx}
-        src={`https://aipostbe.bastionex.net/uploads/${img}`}
+        src={img}
         alt="Post"
         className="w-20 h-20 object-cover rounded border"
       />

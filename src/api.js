@@ -1,13 +1,15 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "https://aipostbe.bastionex.net", // backend URL
+  baseURL: "http://localhost:3002", // backend URL
 });
 
 // --- API functions ---
 export const fetchPosts = () => API.get("/posts");
-export const generatePost = (topic,autoApprove) => API.post("/posts/generate", { topic , autoApprove});
-export const getTrendingTopics = () => API.get("/posts/trending-topics");
+export const generatePost = (topic,image, autoApprove) => API.post("/posts/generate", { topic , image, autoApprove});
+// api.js
+export const getTrendingTopics = (industry = "top", page = 1, limit = 5) =>
+  API.get(`/posts/trending-topics?industry=${industry}&page=${page}&limit=${limit}`);
 export const bulkSchedulePosts = ({ ids, startTime, perDay, manualDate }) => {
   return API.post("/posts/bulk-schedule", {
     ids, // must be array
