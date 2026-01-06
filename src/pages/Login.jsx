@@ -56,9 +56,9 @@ export default function Login({ onLogin }) {
           </button>
         </form>
 
-        <p className="text-xs text-center text-gray-500 mt-4">
+        {/* <p className="text-xs text-center text-gray-500 mt-4">
           Durgesh / 1234 → main &nbsp;&nbsp;|&nbsp;&nbsp; Shashank / 123 → default
-        </p>
+        </p> */}
       </div>
     </div>
   );
