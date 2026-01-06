@@ -4,6 +4,12 @@ const API = axios.create({
   baseURL: process.env.REACT_APP_BACKEND_URL,
 });
 
+
+// --- AUTH ---
+export const login = (username, password) =>
+  API.post("/login", { username, password });
+
+
 // --- POSTS ---
 export const fetchPosts = () => API.get("/posts");
 
