@@ -1,3 +1,43 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Post view popup scrollbar */
+.post-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.post-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.post-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(74, 74, 75, 0.4); /* indigo-500 */
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+.post-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(44, 44, 46, 0.7);
+}
+
+/* Firefox */
+.post-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 26, 29, 0.5) transparent;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+

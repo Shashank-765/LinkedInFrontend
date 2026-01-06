@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
 import {
   generatePost,
   getTrendingTopics,
@@ -6,170 +7,182 @@ import {
   stopAutoPosting,
   fetchPosts,
   getSchedulerStatus,
+  updateAutoPostSchedule, // 🔹 added
 } from "../api";
 
-export default function PostForm() {
+export default function PostForm({ onPostCreated }) {
   const [topic, setTopic] = useState("");
   const [image, setImage] = useState("");
   const [loading, setLoading] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
+
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [hoverIndex, setHoverIndex] = useState(-1);
-  const [scheduler, setScheduler] = useState({
-    running: false,
-    lastPostedAt: null,
-    nextPostAt: null,
-    linkedInPosts: [],
-  });
-  const [posts, setPosts] = useState([]);
 
-  // Pagination & industry
-  const [industry, setIndustry] = useState("top"); // default industry
+  const [industry, setIndustry] = useState("top");
   const [customIndustry, setCustomIndustry] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
 
-  const wrapperRef = useRef(null);
-console.log('industry', industry)
-  // Fetch default topics on first load
+
+  const [scheduler, setScheduler] = useState({
+    running: false,
+    lastPostedAt: null,
+    nextPostAt: null,
+    intervalMinutes: null, // 🔹 added
+  });
+
+  const [intervalInput, setIntervalInput] = useState(""); // 🔹 added
+
+  const [posts, setPosts] = useState([]);
+
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
+const API = axios.create({
+  baseURL: process.env.REACT_APP_BACKEND_URL,
+});
   useEffect(() => {
-    fetchTrendingTopics(1, true);
     fetchAllPosts();
     fetchSchedulerStatus();
+  }, []);
 
-    const interval = setInterval(fetchSchedulerStatus, 30000);
-    return () => clearInterval(interval);
+  useEffect(() => {
+    setSuggestions([]);
+    setPage(1);
+    setHasMore(true);
+    if (industry !== "custom") fetchTrendingTopics(1, true);
   }, [industry]);
 
-  // Fetch trending topics
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target) &&
+        inputRef.current &&
+        !inputRef.current.contains(e.target)
+      ) {
+        setShowSuggestions(false);
+        setHoverIndex(-1);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const fetchTrendingTopics = async (pageNumber = 1, reset = false) => {
     try {
+      if (loadingMore) return;
       setLoadingMore(true);
-      const selectedIndustry = industry === "custom" ? customIndustry.trim() : industry;
+
+      const selectedIndustry =
+        industry === "custom" ? customIndustry.trim() : industry;
       if (!selectedIndustry) return;
 
-      const res = await getTrendingTopics(selectedIndustry, pageNumber, 5);
+      const res = await getTrendingTopics(selectedIndustry, 1, pageNumber * 5);
       const newTopics = res.data.topics || [];
 
-      if (reset) setSuggestions(newTopics);
-      else setSuggestions((prev) => [...prev, ...newTopics]);
-
+      setSuggestions((prev) => (reset ? newTopics : [...prev, ...newTopics]));
       setHasMore(newTopics.length === 5);
       setPage(pageNumber);
-    } catch (err) {
-      console.error("Error fetching trending topics", err);
     } finally {
       setLoadingMore(false);
     }
   };
 
   const fetchAllPosts = async () => {
-    try {
-      const res = await fetchPosts();
-      setPosts(res.data.posts || []);
-    } catch (err) {
-      console.error("Error fetching posts", err);
-    }
+    const res = await fetchPosts();
+    setPosts(res.data || []);
   };
 
   const fetchSchedulerStatus = async () => {
-    try {
-      const res = await getSchedulerStatus();
-      setScheduler(res.data || res);
-    } catch (err) {
-      console.error("Error fetching scheduler status", err);
-    }
+    const res = await getSchedulerStatus();
+    const data = res?.data.data ;
+    setScheduler(data);
+    console.log('scheduler', data)
+    setIntervalInput(data.intervalMinutes || "");
   };
 
   const handleGenerate = async () => {
-    if (!topic) return;
-    setLoading(true);
-    try {
-      await generatePost(topic, image, autoApprove);
-      await fetchAllPosts();
-      setTopic("");
-      setImage("");
-      setAutoApprove(false);
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  };
+  if (!topic) return;
+  setLoading(true);
+
+  if (imageFile) {
+    const formData = new FormData();
+    formData.append("topic", topic);
+    formData.append("autoApprove", autoApprove);
+    formData.append("image", imageFile);
+
+    // if user also typed image URL, ignore it because file has priority
+    await API.post("/posts/generate", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  } else {
+    await generatePost(topic, image, autoApprove);
+  }
+
+  await fetchAllPosts();
+  setTopic("");
+  setImage("");
+  setImageFile(null);
+  setAutoApprove(false);
+  onPostCreated?.();
+  setLoading(false);
+};
+
 
   const handleToggleScheduler = async () => {
-    try {
-      if (!scheduler.running) await startAutoPosting();
-      else await stopAutoPosting();
-      await fetchSchedulerStatus();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to toggle scheduler");
-    }
+    if (!scheduler.running) await startAutoPosting();
+    else await stopAutoPosting();
+    fetchSchedulerStatus();
   };
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-        setShowSuggestions(false);
-        setHoverIndex(-1);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const handleUpdateInterval = async () => {
+    if (!intervalInput) return;
+    await updateAutoPostSchedule(Number(intervalInput));
+    fetchSchedulerStatus();
+  };
 
-  // Infinite scroll for trending topics
-  useEffect(() => {
-    const handleScroll = () => {
-      if (
-        window.innerHeight + window.scrollY >= document.body.offsetHeight - 100 &&
-        !loadingMore &&
-        hasMore
-      ) {
-        fetchTrendingTopics(page + 1);
-      }
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [page, hasMore, loadingMore, industry, customIndustry]);
-
-  // Suggestions logic
-  const handleFocus = () => setShowSuggestions(true);
-  const handleSelect = (selected) => {
-    console.log('selected', selected)
-    setTopic(selected);
+  const handleSelect = (val, img) => {
+    setTopic(val);
+    setImage(img || "");
     setShowSuggestions(false);
     setHoverIndex(-1);
   };
+
   const handleKeyDown = (e) => {
     if (!suggestions.length) return;
-    if (e.key === "ArrowDown") setHoverIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
-    else if (e.key === "ArrowUp") setHoverIndex((prev) => Math.max(prev - 1, 0));
-    else if (e.key === "Enter" && hoverIndex >= 0) handleSelect(suggestions[hoverIndex].topic);
+    if (e.key === "ArrowDown") setHoverIndex((i) => Math.min(i + 1, suggestions.length - 1));
+    if (e.key === "ArrowUp") setHoverIndex((i) => Math.max(i - 1, 0));
+    if (e.key === "Escape") setShowSuggestions(false);
+    if (e.key === "Enter" && hoverIndex >= 0)
+      handleSelect(suggestions[hoverIndex].topic, suggestions[hoverIndex].image);
   };
 
-  return (
-    <div ref={wrapperRef} className="p-4 border mb-4 relative">
 
-      {/* Industry Selector */}
-      <div className="mb-4">
-        <label className="block mb-1 font-semibold">Catogories</label>
-        <div className="flex gap-2">
-          <select
-            value={industry}
-            onChange={(e) => {
-              const val = e.target.value;
-              setIndustry(val);
-              setPage(1);
-              setHasMore(true);
-              if (val !== "custom") fetchTrendingTopics(1, true);
-            }}
-            className="border p-2 flex-1"
-          >
-            <option value="top">India</option>
+   return (
+  <div className=" bg-gradient-to-br from-indigo-50 via-sky-50 to-purple-50 p-8">
+    <div className="max-w-7xl mx-auto space-y-8">
+
+     
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+
+        {/* Left Panel */}
+        <div className="lg:col-span-3 bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl p-8 shadow-xl space-y-6 relative">
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wide text-gray-500">Category</label>
+            <div className="flex gap-3">
+              <select
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+              >
+                <option value="top">India</option>
             <option value="world">World</option>
             <option value="local">Local</option>
             <option value="business">Business</option>
@@ -178,212 +191,158 @@ console.log('industry', industry)
             <option value="sports">Sports</option>
             <option value="science">Science</option>
             <option value="health">Health</option>
-            <option value="custom">custom</option>
-          </select>
+            <option value="custom">Custom</option>
+              </select>
 
-          {industry === "custom" && (
-            <input
-              type="text"
-              placeholder="Enter custom industry"
-              className="border p-2 flex-1"
-              value={customIndustry}
-              onChange={(e) => setCustomIndustry(e.target.value)}
-              onBlur={() => {
-                if (customIndustry.trim()) fetchTrendingTopics(1, true);
-              }}
-            />
-          )}
-        </div>
-      </div>
-
-      <h2 className="text-lg font-bold mb-2">Generate New Post</h2>
-
-      {/* Topic Input */}
-      <input
-        type="text"
-        value={topic}
-        onFocus={handleFocus}
-        onChange={(e) => setTopic(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Search Trending Topics"
-        className="border p-2 w-full mb-2"
-      />
-
-      {/* Suggestions Dropdown */}
-      {(showSuggestions || hoverIndex >= 0) && suggestions.length > 0 && (
-        <div className="absolute z-10 bg-white border rounded shadow-md w-full max-h-60 overflow-y-auto">
-                    <ul>
-              {suggestions.map((s, i) => (
-                <li
-                  key={i}
-                  onClick={() => {
-                    handleSelect(s.topic);
-                    setImage(s.image);
-                  }}
-                  onMouseEnter={() => setHoverIndex(i)}
-                  className={`p-2 cursor-pointer flex gap-3 items-center ${
-                    hoverIndex === i ? "bg-blue-100" : "bg-white"
-                  }`}
-                >
-                  {/* Thumbnail */}
-                  {s.image ? (
-                    <img
-                      src={s.image}
-                      alt={s.topic}
-                      className="w-12 h-12 object-cover rounded"
-                      loading="lazy"
-                      onError={e => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  ) : (
-                    <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-400">
-                      No Image
-                    </div>
-                  )}
-
-                  {/* Text content */}
-                  <div className="flex flex-col">
-                    <div className="font-bold">{s.topic}</div>
-                    <div className="text-xs text-gray-400">{s.source}</div>
-                    <div className="text-xs text-gray-400">{s.tweets} Rank</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-
-
-          {loadingMore && (
-            <div className="p-2 text-center text-gray-500">Loading...</div>
-          )}
-
-          {!loadingMore && hasMore && (
-            <button
-              onClick={() => fetchTrendingTopics(page + 1)}
-              className="w-full text-blue-600 p-2 border-t hover:bg-blue-50"
-            >
-              Load More
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Auto Approve */}
-      <div className="flex items-center mb-4 mt-2">
-        <span className="mr-2">Auto Approve:</span>
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={autoApprove}
-            onChange={() => setAutoApprove(!autoApprove)}
-            className="sr-only peer"
-          />
-          <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-500 transition-all"></div>
-          <div
-            className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-all ${
-              autoApprove ? "translate-x-5" : ""
-            }`}
-          ></div>
-        </label>
-      </div>
-
-      {/* Buttons */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-        >
-          {loading ? "Generating..." : "Generate"}
-        </button>
-        <button
-          onClick={handleToggleScheduler}
-          className={`px-4 py-2 rounded text-white ${
-            scheduler.running ? "bg-red-500" : "bg-green-500"
-          }`}
-        >
-          {scheduler.running ? "Stop Auto-Posting" : "Start Auto-Posting"}
-        </button>
-      </div>
-
-      {/* Scheduler Info */}
-      <div className="mb-4 text-sm text-gray-700 border p-2 rounded">
-        <p>
-          <strong>Status:</strong> {scheduler.running ? "Active ✅" : "Stopped ❌"}
-        </p>
-        <p>
-          <strong>Last Posted At:</strong>{" "}
-          {scheduler.lastPostedAt
-            ? new Date(scheduler.lastPostedAt).toLocaleString()
-            : "-"}
-        </p>
-        <p>
-          <strong>Next Post At:</strong>{" "}
-          {scheduler.nextPostAt
-            ? new Date(scheduler.nextPostAt).toLocaleString()
-            : "-"}
-        </p>
-
-        {scheduler.linkedInPosts?.length > 0 && (
-          <div className="mt-2">
-            <strong>LinkedIn Posts:</strong>
-            <ul className="list-disc list-inside max-h-32 overflow-y-auto">
-              {scheduler.linkedInPosts.map((post, idx) => (
-                <li key={idx}>
-                  <a
-                    href={post.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-600 underline"
-                  >
-                    {post.url}
-                  </a>{" "}
-                  ({post.postedAt ? new Date(post.postedAt).toLocaleString() : "-"})
-                </li>
-              ))}
-            </ul>
+              {industry === "custom" && (
+                <input
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                  placeholder="Custom category"
+                  value={customIndustry}
+                  onChange={(e) => setCustomIndustry(e.target.value)}
+                  onBlur={() => customIndustry && fetchTrendingTopics(1, true)}
+                />
+              )}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Posts List */}
-      <div className="mt-4">
-        <h3 className="font-bold mb-2">Posts</h3>
-        {posts.length === 0 ? (
-          <p className="text-gray-500">No posts yet.</p>
-        ) : (
-          <ul className="space-y-2 max-h-64 overflow-y-auto">
-            {posts.map((post) => (
-              <li key={post._id} className="border p-2 rounded">
-                <div>
-                  <strong>Topic:</strong> {post.topic}
-                </div>
-                <div>
-                  <strong>Status:</strong> {post.status}
-                </div>
-                <div>
-                  <strong>Scheduled At:</strong>{" "}
-                  {post.scheduledAt ? new Date(post.scheduledAt).toLocaleString() : "-"}
-                </div>
-                <div>
-                  <strong>Posted At:</strong>{" "}
-                  {post.postedAt ? new Date(post.postedAt).toLocaleString() : "-"}
-                </div>
-                {post.linkedinPostUrl && (
-                  <a
-                    href={post.linkedinPostUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-600 underline"
+          {/* Topic */}
+          <div className="relative">
+            <input
+              ref={inputRef}
+              value={topic}
+              onFocus={() => setShowSuggestions(true)}
+              onChange={(e) => setTopic(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Search trending topics..."
+              className="w-full rounded-2xl border border-gray-200 px-5 py-4 text-base focus:ring-2 focus:ring-indigo-400 outline-none shadow-sm"
+            />
+            <input
+  type="file"
+  accept="image/*"
+  onChange={(e) => setImageFile(e.target.files[0])}
+  className="block text-sm mt-2"
+/>
+
+
+            {/* Dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div
+                ref={dropdownRef}
+                className="absolute mt-3 w-full bg-white rounded-2xl border border-gray-100 shadow-2xl max-h-72 overflow-y-auto z-50 animate-fade-in"
+              >
+                {suggestions.map((s, i) => (
+                  <div
+                    key={i}
+                    onClick={() => handleSelect(s.topic, s.image)}
+                    onMouseEnter={() => setHoverIndex(i)}
+                    className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition ${
+                      hoverIndex === i ? "bg-indigo-50" : "hover:bg-slate-50"
+                    }`}
                   >
-                    View on LinkedIn
-                  </a>
+                    {s.image ? (
+                      <img src={s.image} className="w-12 h-12 rounded-xl object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-gray-200" />
+                    )}
+                    <div>
+                      <div className="font-medium text-sm text-gray-800">{s.topic}</div>
+                      <div className="text-xs text-gray-400">{s.source}</div>
+                    </div>
+                  </div>
+                ))}
+
+                {hasMore && (
+                  <button
+                    onClick={() => fetchTrendingTopics(page + 1)}
+                    className="w-full py-3 text-sm text-indigo-600 hover:bg-indigo-50 border-t"
+                  >
+                    {loadingMore ? "Loading..." : "Load more"}
+                  </button>
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
+              </div>
+            )}
+          </div>
+
+          {/* Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+            <label className="flex items-center gap-3 text-sm text-gray-600">
+              <input type="checkbox" checked={autoApprove} onChange={() => setAutoApprove(!autoApprove)} />
+              Auto approve generated posts
+            </label>
+
+            <div className="flex gap-4">
+              <button
+                onClick={handleGenerate}
+                disabled={loading}
+                className="px-7 py-3 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium shadow-lg hover:scale-[1.02] active:scale-[0.98] transition"
+              >
+                {loading ? "Generating..." : "Generate"}
+              </button>
+
+              <button
+                onClick={handleToggleScheduler}
+                className={`px-7 py-3 rounded-full font-medium shadow-lg transition ${
+                  scheduler.running
+                    ? "bg-red-500 hover:bg-red-600 text-white"
+                    : "bg-emerald-500 hover:bg-emerald-600 text-white"
+                }`}
+              >
+                {scheduler.running ? "Stop Auto" : "Start Auto"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Panel */}
+        <div className="lg:col-span-2 space-y-6">
+
+          <div className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl p-6 shadow-xl">
+              <h3 className="font-semibold text-gray-800 mb-3">⏱ Scheduler</h3>
+              <div className="space-y-1 text-sm text-gray-600">
+                <p>Status: <strong>{scheduler.running ? "Active" : "Stopped"}</strong></p>
+                <p>Last: {scheduler.lastPostedAt ? new Date(scheduler.lastPostedAt).toLocaleString() : "-"}</p>
+                <p>Next: {scheduler.nextPostAt ? new Date(scheduler.nextPostAt).toLocaleString() : "-"}</p>
+              </div>
+
+              <div className="flex gap-2 mt-3">
+                <input
+                  type="number"
+                  placeholder="Interval (minutes)"
+                  value={intervalInput}
+                  onChange={(e) => setIntervalInput(e.target.value)}
+                  className="w-full rounded-xl border px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={handleUpdateInterval}
+                  className="px-4 py-2 rounded-xl bg-indigo-500 text-white text-sm"
+                >
+                  Update
+                </button>
+              </div>
+            </div>
+
+
+          <div className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl p-6 shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-4">📝 History</h3>
+            <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
+              {posts.length === 0 ? (
+                <p className="text-sm text-gray-400">No posts yet</p>
+              ) : (
+                posts.map((p) => (
+                  <div key={p._id} className="border border-gray-100 rounded-xl p-4 hover:bg-slate-50 transition">
+                    <div className="font-medium text-sm truncate">{p.topic}</div>
+                    <div className="text-xs text-gray-500">{p.status}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
-  );
+  </div>
+);
+
 }
