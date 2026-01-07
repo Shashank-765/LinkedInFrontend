@@ -114,8 +114,8 @@ export default function PostList({reload}) {
   if (!img) return "";
   if (img.startsWith("http")) return img;
   // console.log('process.env.REACT_APP_API_BASE_URL', `https://6bskx5w6-3002.inc1.devtunnels.ms${img}`)
-  // return `https://aipostbe.bastionex.net${img}`;
-  return `https://6bskx5w6-3002.inc1.devtunnels.ms${img}`;
+  return `https://aipostbe.bastionex.net${img}`;
+  // return `https://6bskx5w6-3002.inc1.devtunnels.ms${img}`;
 
 };
 
